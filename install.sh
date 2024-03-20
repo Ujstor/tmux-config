@@ -27,6 +27,6 @@ fi
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 
 echo "Tmux setup complete."
+echo "Install plugins with leter+I"
 
 rm -rf "$temp_dir"
-
