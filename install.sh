@@ -19,6 +19,7 @@ if [ -f ~/.tmux.conf ]; then
 fi
 
 cp .tmux.conf ~/.tmux.conf
+cp tmux.sh ~/tmux.sh
 
 if [ -d ~/.tmux/plugins/tpm ]; then
     rm -rf ~/.tmux/plugins/tpm
