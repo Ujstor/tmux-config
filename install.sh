@@ -23,8 +23,8 @@ git clone --depth 1 https://github.com/Ujstor/tmux-config.git "$temp_dir"
 cd "$temp_dir"
 
 # Download and build tmux from official source
-curl -sSL https://github.com/tmux/tmux/releases/latest/download/tmux-3.5a.tar.gz | tar -xz
-cd tmux-3.5a
+curl -sSL https://github.com/tmux/tmux/releases/latest/download/tmux-3.6a.tar.gz | tar -xz
+cd tmux-3.6a
 ./configure --prefix=/usr/local
 make
 sudo make install
