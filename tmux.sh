@@ -87,12 +87,15 @@ main-horizontal | main-vertical) ;;
 	;;
 esac
 
+# Measure the window that is being resized: with -t that is the TARGET, not
+# the one this runs from (a 200-column target measured from an 80-column window
+# got a main pane of 40 instead of 100).
 if [ "$layout_name" = "main-vertical" ]; then
 	MAIN_SIZE_OPTION='main-pane-width'
-	dimension=$(tmux display -p '#{window_width}')
+	dimension=$(tmux display -p ${target:+-t "$target"} '#{window_width}')
 else
 	MAIN_SIZE_OPTION='main-pane-height'
-	dimension=$(tmux display -p '#{window_height}')
+	dimension=$(tmux display -p ${target:+-t "$target"} '#{window_height}')
 fi
 
 if [ -z "$dimension" ]; then
