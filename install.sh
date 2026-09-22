@@ -39,7 +39,9 @@ TMUX_SOURCE_VERSION="${TMUX_SOURCE_VERSION:-3.7c}"
 
 BUILD_TMUX="${TMUX_BUILD:-0}"
 SKIP_PLUGINS="${TMUX_SKIP_PLUGINS:-0}"
+KEEP_CONFIG="${TMUX_KEEP_CONFIG:-0}"
 FORCE=0
+PLUGINS_MISSING=0
 
 TPM_REPO="https://github.com/tmux-plugins/tpm"
 TPM_DIR="$HOME/.tmux/plugins/tpm"
@@ -71,12 +73,15 @@ Usage: install.sh [options]
                          The distro tmux is left in place either way.
   --tmux-version VER     Version to build with --build-tmux (default: pinned).
   --skip-plugins         Install TPM but do not clone the plugins.
+  --keep-config          Leave ~/.tmux.conf exactly as it is — something else
+                         manages it (linux-devops-tools symlinks it into its
+                         own checkout and runs this with --keep-config).
   --force                Replace ~/.tmux.conf even when it is a symlink
                          (e.g. managed by a dotfiles repo). Backed up first.
   -h, --help             This text.
 
 Environment equivalents: TMUX_BUILD=1, TMUX_SOURCE_VERSION=3.7c,
-TMUX_SKIP_PLUGINS=1.
+TMUX_SKIP_PLUGINS=1, TMUX_KEEP_CONFIG=1.
 
 Piping from curl? Pass flags after `--`:
   curl -sSL .../install.sh | bash -s -- --build-tmux
@@ -93,6 +98,7 @@ while [ $# -gt 0 ]; do
 		;;
 	--tmux-version=*) TMUX_SOURCE_VERSION="${1#*=}" ;;
 	--skip-plugins) SKIP_PLUGINS=1 ;;
+	--keep-config) KEEP_CONFIG=1 ;;
 	--force) FORCE=1 ;;
 	-h | --help)
 		usage
@@ -154,7 +160,11 @@ pkg_install() { # pkg_install <debian-names...>  (best effort elsewhere)
 
 # ── 1. tmux ──────────────────────────────────────────────────────────────────
 build_tmux_from_source() {
-	local v="$TMUX_SOURCE_VERSION" work
+	local v="$TMUX_SOURCE_VERSION" work cache
+	if [ -x /usr/local/bin/tmux ] && [ "$(/usr/local/bin/tmux -V 2>/dev/null | awk '{print $2}')" = "$v" ]; then
+		log "tmux: $v is already built at /usr/local/bin/tmux"
+		return 0
+	fi
 	log "building tmux $v from source (--build-tmux)"
 
 	# NOTE: nothing here removes the distro tmux. The previous version of this
@@ -171,17 +181,24 @@ build_tmux_from_source() {
 	*) warn "unknown package manager: install libevent, ncurses and a C toolchain yourself" ;;
 	esac
 
-	work="$(mktemp -d)"
+	# Not a mktemp -d in /tmp: ./configure runs what it just wrote, and /tmp is
+	# mounted noexec on a hardened host ("./configure: Permission denied").
+	# ~/.cache is on disk and yours.
+	cache="${XDG_CACHE_HOME:-$HOME/.cache}"
+	mkdir -p -- "$cache"
+	work="$(mktemp -d "$cache/tmux-build.XXXXXX")"
 	# shellcheck disable=SC2064
 	trap "rm -rf '$work'" RETURN
 	curl -fsSL --proto '=https' --tlsv1.2 \
 		"https://github.com/tmux/tmux/releases/download/${v}/tmux-${v}.tar.gz" |
 		tar -xz -C "$work" || die "could not download tmux $v"
+	# Chained with &&: `set -e` is off inside a ( … ) that is followed by ||, so
+	# a failed ./configure used to run make, and `make install`, anyway.
 	(
-		cd "$work/tmux-${v}"
-		./configure --prefix=/usr/local >/dev/null
-		make -j"$(nproc 2>/dev/null || echo 2)" >/dev/null
-		as_root make install >/dev/null
+		cd "$work/tmux-${v}" &&
+			./configure --prefix=/usr/local >/dev/null &&
+			make -j"$(nproc 2>/dev/null || echo 2)" >/dev/null &&
+			as_root make install >/dev/null
 	) || die "the tmux $v build failed"
 
 	hash -r 2>/dev/null || true
@@ -259,6 +276,13 @@ trap cleanup EXIT
 # refuses to silently eat a symlink that a dotfiles repo probably owns.
 install_file() {
 	local src="$1" dst="$2" mode="$3" bak
+	# Already a link to this very checkout (linux-devops-tools makes exactly that
+	# one): installed, not a conflict. It used to warn and suggest --force, which
+	# turns the managed link into an unmanaged copy.
+	if [ -L "$dst" ] && [ "$(readlink -f -- "$dst")" = "$(readlink -f -- "$src")" ]; then
+		info "$dst already links to this checkout"
+		return 0
+	fi
 	if [ -L "$dst" ]; then
 		if [ "$FORCE" != "1" ]; then
 			warn "$dst is a symlink -> $(readlink "$dst")"
@@ -304,16 +328,57 @@ install_plugins() {
 	# session was the documented way, so a fresh box had TPM but no plugins:
 	# no theme, no resurrect, no yank — which reads as "the config is broken".
 	# This entry point needs no session and no keypress.
-	local runner="$TPM_DIR/bin/install_plugins"
+	local runner="$TPM_DIR/bin/install_plugins" sock rc=0
 	[ -x "$runner" ] || {
 		warn "$runner is missing; skipping plugin install"
 		return 0
 	}
 	log "installing plugins listed in $CONF_DST"
-	if "$runner"; then :; else
+	# On a server of its OWN. TPM asks the running tmux server where plugins go
+	# (TMUX_PLUGIN_MANAGER_PATH), and a server that never ran TPM — the one the
+	# "TPM is not installed" banner is shown in, or any session this is run from
+	# — has no answer: every plugin was skipped and the run still exited 0. A
+	# fresh server loads ~/.tmux.conf, runs TPM and knows. Its socket directory
+	# is under /tmp on purpose: a socket path must fit in ~108 bytes, which a
+	# long $TMPDIR does not, and a socket needs no exec.
+	sock="$(mktemp -d /tmp/tmux-install.XXXXXX)"
+	env -u TMUX TMUX_TMPDIR="$sock" "$runner" || rc=$?
+	env -u TMUX TMUX_TMPDIR="$sock" tmux kill-server >/dev/null 2>&1 || true
+	rm -rf -- "$sock"
+	if [ "$rc" -ne 0 ]; then
 		warn "TPM reported a problem; re-run install.sh, or use prefix + I inside tmux"
 		note "plugin install did not finish cleanly."
 	fi
+}
+
+# sync_pinned_plugins — move an existing clone of an `owner/repo#ref` plugin to
+# its pin. TPM only clones what is missing, so a box that installed catppuccin
+# before the #v2.1.3 pin still runs v0.x, where every @catppuccin_* option in the
+# config is "invalid option". Unpinned plugins are left to prefix + U.
+sync_pinned_plugins() {
+	local spec ref dir want head
+	while read -r spec; do
+		case "$spec" in *'#'*) ;; *) continue ;; esac
+		ref="${spec#*#}"
+		dir="$HOME/.tmux/plugins/$(basename -- "${spec%%#*}")"
+		[ -d "$dir/.git" ] || continue
+		want="$(git -C "$dir" rev-parse -q --verify "$ref^{commit}" 2>/dev/null || true)"
+		if [ -z "$want" ]; then
+			git -C "$dir" fetch -q --tags origin 2>/dev/null || {
+				warn "could not fetch $dir to move it to $ref"
+				continue
+			}
+			want="$(git -C "$dir" rev-parse -q --verify "$ref^{commit}" 2>/dev/null || true)"
+		fi
+		head="$(git -C "$dir" rev-parse -q --verify HEAD 2>/dev/null || true)"
+		if [ -z "$want" ] || [ "$want" = "$head" ]; then continue; fi
+		if git -C "$dir" checkout -q "$ref" 2>/dev/null; then
+			info "moved $(basename -- "$dir") to its pinned $ref"
+		else
+			warn "could not check out $ref in $dir (local changes?)"
+			note "$(basename -- "$dir") is not at its pinned $ref."
+		fi
+	done < <(awk '/^[ \t]*set(-option)? +-g +@plugin/ {gsub(/["'\'']/,"",$4); print $4}' "$CONF_DST")
 }
 
 verify_plugins() {
@@ -325,6 +390,7 @@ verify_plugins() {
 	if [ ${#missing[@]} -gt 0 ]; then
 		warn "not installed: ${missing[*]}"
 		note "missing plugins: ${missing[*]}"
+		PLUGINS_MISSING=1
 	else
 		info "all plugins present under ~/.tmux/plugins"
 	fi
@@ -335,7 +401,11 @@ ensure_tmux
 resolve_payload
 
 log "installing config"
-install_file "$SRC_DIR/.tmux.conf" "$CONF_DST" 0644
+if [ "$KEEP_CONFIG" = "1" ]; then
+	info "--keep-config: leaving $CONF_DST as it is"
+else
+	install_file "$SRC_DIR/.tmux.conf" "$CONF_DST" 0644
+fi
 install_file "$SRC_DIR/tmux.sh" "$TMUXSH_DST" 0755
 
 log "installing TPM"
@@ -344,6 +414,7 @@ if [ "$SKIP_PLUGINS" = "1" ]; then
 	info "--skip-plugins: not cloning plugins"
 else
 	install_plugins
+	sync_pinned_plugins
 	verify_plugins
 fi
 
@@ -375,4 +446,9 @@ if [ ${#NOTES[@]} -gt 0 ]; then
 	echo
 	warn "worth knowing:"
 	for n in "${NOTES[@]}"; do printf '    - %s\n' "$n"; done
+fi
+# A config without its plugins comes up bare and looks broken; say so in the
+# exit status too, so a caller (a bootstrapper, CI) sees it.
+if [ "$PLUGINS_MISSING" = "1" ]; then
+	exit 1
 fi
