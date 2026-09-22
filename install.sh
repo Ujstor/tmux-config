@@ -51,10 +51,13 @@ TMUXSH_DST="$HOME/tmux.sh"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 NOTES=()
 
-log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 info() { printf '    %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m  %s\n' "$*" >&2; }
-die()  { printf '\033[1;31mxx\033[0m  %s\n' "$*" >&2; exit 1; }
+die() {
+	printf '\033[1;31mxx\033[0m  %s\n' "$*" >&2
+	exit 1
+}
 note() { NOTES+=("$*"); }
 
 usage() {
@@ -243,12 +246,12 @@ resolve_payload() {
 	SRC_DIR="$CLONE_DIR/repo"
 }
 cleanup() {
-  # `return 0` is load-bearing. Run from a checkout CLONE_DIR is empty, so
-  # `[ -n "" ]` returns 1 as the trap's last command — and under `set -e`
-  # that becomes the SCRIPT's exit status. The install succeeds and the
-  # caller still sees failure, which breaks any `&&` chain or CI gate.
-  [ -n "$CLONE_DIR" ] && rm -rf "$CLONE_DIR"
-  return 0
+	# `return 0` is load-bearing. Run from a checkout CLONE_DIR is empty, so
+	# `[ -n "" ]` returns 1 as the trap's last command — and under `set -e`
+	# that becomes the SCRIPT's exit status. The install succeeds and the
+	# caller still sees failure, which breaks any `&&` chain or CI gate.
+	[ -n "$CLONE_DIR" ] && rm -rf "$CLONE_DIR"
+	return 0
 }
 trap cleanup EXIT
 

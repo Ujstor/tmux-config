@@ -40,7 +40,7 @@
 # arguments and fail there), and `expr` is replaced with POSIX arithmetic.
 
 usage() {
-    printf 'Usage: %s -l <main-horizontal|main-vertical> -p <percentage> [-t target-window]\n' "$0" >&2
+	printf 'Usage: %s -l <main-horizontal|main-vertical> -p <percentage> [-t target-window]\n' "$0" >&2
 }
 
 lflag=
@@ -50,64 +50,64 @@ percentage=
 target=
 
 while getopts l:p:t: name; do
-    case $name in
-    l)
-        lflag=1
-        layout_name="$OPTARG"
-        ;;
-    p)
-        pflag=1
-        percentage="$OPTARG"
-        ;;
-    t)
-        target="$OPTARG"
-        ;;
-    ?)
-        usage
-        exit 2
-        ;;
-    esac
+	case $name in
+	l)
+		lflag=1
+		layout_name="$OPTARG"
+		;;
+	p)
+		pflag=1
+		percentage="$OPTARG"
+		;;
+	t)
+		target="$OPTARG"
+		;;
+	?)
+		usage
+		exit 2
+		;;
+	esac
 done
 
 if [ -z "$lflag" ] || [ -z "$pflag" ]; then
-    usage
-    exit 2
+	usage
+	exit 2
 fi
 
 if ! [ "$percentage" -eq "$percentage" ] 2>/dev/null; then
-    printf 'Percentage (-p) must be an integer\n' >&2
-    exit 1
+	printf 'Percentage (-p) must be an integer\n' >&2
+	exit 1
 fi
 
 case "$layout_name" in
 main-horizontal | main-vertical) ;;
 *)
-    printf 'layout name must be main-horizontal or main-vertical\n' >&2
-    exit 1
-    ;;
+	printf 'layout name must be main-horizontal or main-vertical\n' >&2
+	exit 1
+	;;
 esac
 
 if [ "$layout_name" = "main-vertical" ]; then
-    MAIN_SIZE_OPTION='main-pane-width'
-    dimension=$(tmux display -p '#{window_width}')
+	MAIN_SIZE_OPTION='main-pane-width'
+	dimension=$(tmux display -p '#{window_width}')
 else
-    MAIN_SIZE_OPTION='main-pane-height'
-    dimension=$(tmux display -p '#{window_height}')
+	MAIN_SIZE_OPTION='main-pane-height'
+	dimension=$(tmux display -p '#{window_height}')
 fi
 
 if [ -z "$dimension" ]; then
-    printf 'tmux.sh: no tmux window to resize (run it from inside tmux)\n' >&2
-    exit 1
+	printf 'tmux.sh: no tmux window to resize (run it from inside tmux)\n' >&2
+	exit 1
 fi
 
 MAIN_PANE_SIZE=$((dimension * percentage / 100))
 
 if [ -n "$target" ]; then
-    tmux setw -t "$target" "$MAIN_SIZE_OPTION" "$MAIN_PANE_SIZE"
-    tmux select-layout -t "$target" "$layout_name"
+	tmux setw -t "$target" "$MAIN_SIZE_OPTION" "$MAIN_PANE_SIZE"
+	tmux select-layout -t "$target" "$layout_name"
 else
-    tmux setw "$MAIN_SIZE_OPTION" "$MAIN_PANE_SIZE"
-    tmux select-layout "$layout_name"
+	tmux setw "$MAIN_SIZE_OPTION" "$MAIN_PANE_SIZE"
+	tmux select-layout "$layout_name"
 fi
 
 exit 0
