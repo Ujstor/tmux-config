@@ -17,8 +17,11 @@ The symlink is not the whole install. `~/.tmux.conf` on its own is **inert**:
 every `set -g @plugin` line in it is a no-op without `~/.tmux/plugins/tpm`, so
 there is no theme, no `tmux-resurrect` and no `tmux-yank` — which is what binds
 `y` in copy mode. `install.sh` installs tmux, TPM, every plugin and `~/tmux.sh`,
-non-interactively. It backs up anything it replaces and refuses to overwrite a
-symlink it did not make.
+non-interactively — also when it is run from inside a tmux session. It backs up
+anything it replaces and refuses to overwrite a symlink it did not make; a
+symlink into its own checkout counts as installed. `--keep-config` leaves
+`~/.tmux.conf` alone altogether, which is how linux-devops-tools runs it, since
+it places that symlink itself.
 
 Prefix is <kbd>Ctrl</kbd>+<kbd>Space</kbd>.
 
@@ -37,7 +40,7 @@ OSC 52. The last one is what survives a plain SSH hop; tmux emits it itself.
 | <kbd>prefix</kbd> <kbd>[</kbd> | enter copy mode |
 | <kbd>v</kbd> / <kbd>C-v</kbd> | start a selection / toggle rectangle |
 | <kbd>y</kbd> | yank to the system clipboard, and flash how much |
-| <kbd>prefix</kbd> <kbd>P</kbd> | paste the **system** clipboard into the pane |
+| <kbd>prefix</kbd> <kbd>P</kbd> | paste the **system** clipboard into the pane, as a bracketed paste — and say so when this host has no readable clipboard, instead of pasting tmux's last buffer |
 | <kbd>prefix</kbd> <kbd>]</kbd> | paste tmux's own buffer |
 | drag | select and yank, in a normal shell pane |
 | <kbd>Alt</kbd>/<kbd>Ctrl</kbd> + drag | select and yank **inside a full-screen app** |
@@ -87,6 +90,15 @@ The keyboard route — <kbd>prefix</kbd> <kbd>[</kbd>, then <kbd>v</kbd> and
 | <kbd>prefix</kbd> <kbd>r</kbd> | reload this config |
 | <kbd>prefix</kbd> <kbd>I</kbd> | install / update plugins |
 | <kbd>prefix</kbd> <kbd>C-s</kbd> / <kbd>C-r</kbd> | save / restore sessions (tmux-resurrect) |
+
+## Sessions and logout
+
+tmux-continuum saves every 15 minutes and tmux-resurrect restores on
+<kbd>prefix</kbd> <kbd>C-r</kbd>. Its `@continuum-boot` is deliberately **off**: it
+installs a systemd user unit whose stop action is `tmux kill-server`, and without
+lingering systemd stops it seconds after your last login session ends — every
+session, and every job running in one, went with it. Once the option is gone,
+continuum disables that unit again on its next start.
 
 ## Requirements
 
