@@ -21,7 +21,8 @@ non-interactively — also when it is run from inside a tmux session. It backs u
 anything it replaces and refuses to overwrite a symlink it did not make; a
 symlink into its own checkout counts as installed. `--keep-config` leaves
 `~/.tmux.conf` alone altogether, which is how linux-devops-tools runs it, since
-it places that symlink itself.
+it places that symlink itself. A re-run writes nothing: an existing TPM checkout is
+pulled only with `--update`.
 
 Prefix is <kbd>Ctrl</kbd>+<kbd>Space</kbd>.
 

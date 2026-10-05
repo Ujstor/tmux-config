@@ -40,6 +40,7 @@ TMUX_SOURCE_VERSION="${TMUX_SOURCE_VERSION:-3.7c}"
 BUILD_TMUX="${TMUX_BUILD:-0}"
 SKIP_PLUGINS="${TMUX_SKIP_PLUGINS:-0}"
 KEEP_CONFIG="${TMUX_KEEP_CONFIG:-0}"
+UPDATE="${TMUX_UPDATE:-0}"
 FORCE=0
 PLUGINS_MISSING=0
 
@@ -78,10 +79,13 @@ Usage: install.sh [options]
                          own checkout and runs this with --keep-config).
   --force                Replace ~/.tmux.conf even when it is a symlink
                          (e.g. managed by a dotfiles repo). Backed up first.
+  --update               Also pull an existing TPM checkout. Without it a
+                         present TPM is left exactly as it is, so a re-run
+                         writes nothing.
   -h, --help             This text.
 
 Environment equivalents: TMUX_BUILD=1, TMUX_SOURCE_VERSION=3.7c,
-TMUX_SKIP_PLUGINS=1, TMUX_KEEP_CONFIG=1.
+TMUX_SKIP_PLUGINS=1, TMUX_KEEP_CONFIG=1, TMUX_UPDATE=1.
 
 Piping from curl? Pass flags after `--`:
   curl -sSL .../install.sh | bash -s -- --build-tmux
@@ -100,6 +104,7 @@ while [ $# -gt 0 ]; do
 	--skip-plugins) SKIP_PLUGINS=1 ;;
 	--keep-config) KEEP_CONFIG=1 ;;
 	--force) FORCE=1 ;;
+	--update) UPDATE=1 ;;
 	-h | --help)
 		usage
 		exit 0
@@ -310,8 +315,15 @@ install_file() {
 ensure_tpm() {
 	have git || { pkg_install git || die "git is required to install TPM"; }
 	if [ -d "$TPM_DIR/.git" ]; then
-		info "TPM already present at $TPM_DIR"
-		git -C "$TPM_DIR" pull --ff-only -q 2>/dev/null || warn "could not update TPM (keeping the existing checkout)"
+		# Pulling on every run is not idempotent even when nothing upstream moved:
+		# `git pull` rewrites FETCH_HEAD and ORIG_HEAD each time, so a second
+		# install always changed the box. Updating is an explicit request.
+		if [ "$UPDATE" = "1" ]; then
+			git -C "$TPM_DIR" pull --ff-only -q 2>/dev/null || warn "could not update TPM (keeping the existing checkout)"
+			info "TPM updated at $TPM_DIR"
+		else
+			info "TPM already present at $TPM_DIR (--update pulls it)"
+		fi
 	else
 		if [ -e "$TPM_DIR" ]; then
 			mv -- "$TPM_DIR" "$TPM_DIR.bak.$STAMP"
