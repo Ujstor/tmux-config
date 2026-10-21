@@ -77,6 +77,29 @@ selection.
 The keyboard route — <kbd>prefix</kbd> <kbd>[</kbd>, then <kbd>v</kbd> and
 <kbd>y</kbd> — has always worked in these apps and still does.
 
+### Scrolling and copying in OpenCode
+
+OpenCode redraws its whole pane and leaves no tmux history, so copy mode cannot
+scroll back through a session. In an OpenCode pane <kbd>prefix</kbd> <kbd>[</kbd>
+therefore enters an **OC-SCROLL** mode (shown in the status line) that sends the
+copy-mode keys to OpenCode's own scroll bindings. Every other pane gets normal
+copy mode.
+
+| key in OC-SCROLL | what it does |
+|---|---|
+| <kbd>C-f</kbd> / <kbd>C-b</kbd> | page down / up |
+| <kbd>C-d</kbd> / <kbd>C-u</kbd> | half page down / up |
+| <kbd>j</kbd> / <kbd>k</kbd> | one line down / up |
+| <kbd>g</kbd> / <kbd>G</kbd> | first / last message |
+| <kbd>v</kbd> | real copy mode on the visible screen, cursor mid-screen — then <kbd>v</kbd> and <kbd>y</kbd> as usual |
+| <kbd>p</kbd> | paste the system clipboard, like <kbd>prefix</kbd> <kbd>P</kbd> |
+| <kbd>q</kbd> / <kbd>Esc</kbd> / any other key | leave |
+
+The mouse wheel over an OpenCode pane scrolls its chat. Both need OpenCode's own
+mouse capture off — `"mouse": false` in `~/.config/opencode/cli.json`, which
+[linux-devops-tools](https://github.com/Ujstor/linux-devops-tools) installs — so
+drags and the wheel reach tmux instead of OpenCode.
+
 ## Panes and windows
 
 | key | what it does |
